@@ -1,0 +1,2 @@
+# CodeRunner_auto_installer
+CodeRunnerのインストールを行ってくれるWindows用のPowerShellスプリクトです
