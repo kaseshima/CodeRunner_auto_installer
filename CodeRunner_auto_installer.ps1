@@ -12,7 +12,7 @@ $VSC_download = "https://code.visualstudio.com/sha/download?build=stable&os=win3
 $VSC_downloadPath = "VSCodeUserSetup.exe"
 $VSC_isDoenlaed = $false
 $VSC_settingsPath = "$env:appdata\Code\User\settings.json"
-$shell_setup = "`&(Join-Path (`&`${env:ProgramFiles(x86)}'\Microsoft Visual Studio\Installer\vswhere.exe' -latest -products * -requires Microsoft.VisualStudio.Workload.NativeDesktop -property installationPath) 'Common7\Tools\Launch-VsDevShell.ps1')"
+$shell_setup = "`&(Join-Path (`&`"`${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe`" -latest -products * -requires Microsoft.VisualStudio.Workload.NativeDesktop -property installationPath) `"Common7\Tools\Launch-VsDevShell.ps1`")"
 $codeRunner_c = "cd `$dir `&`& `$chcpCode = [System.Text.Encoding]::GetEncoding([int]((chcp) -replace '[^\d]')) `&`& [Console]::OutputEncoding = `$chcpCode;cl.exe /nologo /source-charset:([System.Text.Encoding]`$chcpCode).WebName /execution-charset:([System.Text.Encoding]`$chcpCode).WebName `$fileName && echo `"`" ; .\`"`$fileNameWithoutExt`""
 $codeRunner_cpp = "cd `$dir `&`& `$chcpCode = [System.Text.Encoding]::GetEncoding([int]((chcp) -replace '[^\d]')) `&`& [Console]::OutputEncoding = `$chcpCode;cl.exe /nologo /EHsc /source-charset:([System.Text.Encoding]`$chcpCode).WebName /execution-charset:([System.Text.Encoding]`$chcpCode).WebName `$fileName && echo `"`" ; .\`"`$fileNameWithoutExt`""
 [string[]]$ps_settings = @("-NoExit", "-Command", "chcp 65001;", $shell_setup)
@@ -224,7 +224,7 @@ switch ($Choice) {
 }
 Write-Host ""
 $yn = $false
-Read-Host "変更を適用してもよろしいですか？(y/n)"
+$yn = Read-Host "変更を適用してもよろしいですか？(y/n)"
 if(!$yn)
 {
     Write-Host "インストールをキャンセルします"
