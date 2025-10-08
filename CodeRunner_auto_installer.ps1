@@ -91,12 +91,12 @@ if(Test-Path $VSWhere)
     {
         if((&$VSWhere -latest -products * -requires Microsoft.VisualStudio.Workload.NativeDesktop -format json | ConvertFrom-Json).Count -gt 0)
         {
-            Write-Host "c++ツールがインストール済みのVisualStudioを検知しました"
+            Write-Host "C++ツールがインストール済みのVisualStudioを検知しました"
         }
         else
         {
-            Write-Host "c++用のツールがインストール済みのVisualStudioから検出できませんでした"
-            Write-Host "c++用のツールをVisualStudioに追加してください"
+            Write-Host "C++用のツールがインストール済みのVisualStudioから検出できませんでした"
+            Write-Host "C++用のツールをVisualStudioに追加してください"
             Write-Host ""
             Write-Host "インストールを開始したら、このウィンドウへ戻って操作を続けてください" -ForegroundColor Yellow
             if($VSPath.Count -gt 1)
@@ -150,7 +150,7 @@ else
     Write-Host "VisualStudio Communityをインストールしてください"
     Write-Host "インストールを開始したら、このウィンドウに戻って操作を続けてください"
     $yn = $false
-    Read-YN -ans ([ref]$yn) "VisualStudio Communityとc++用のツールのインストールを開始しますか？(y/n)"
+    Read-YN -ans ([ref]$yn) "VisualStudio CommunityとC++用のツールのインストールを開始しますか？(y/n)"
     if($yn)
     {
         $VS_isDoenlaed = $true
@@ -183,7 +183,7 @@ else
         }
         Write-Host ""
         Write-Host "インストールを待機しています" -ForegroundColor Yellow
-        Write-Host "インストールを完了したにも関わらず次に進まない場合は、システムを再起動してもう一度この.ps1ファイルを実行してくだいさい" -ForegroundColor Yellow
+        Write-Host "インストールを完了したにも関わらず次に進まない場合は、システムを再起動してもう一度この.ps1ファイルを実行してください" -ForegroundColor Yellow
         while(!(Get-Command code -ea SilentlyContinue))
         {
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
@@ -233,11 +233,19 @@ if(!$yn)
 code --install-extension ms-vscode.cpptools-extension-pack
 code --install-extension formulahendry.code-runner
 
-$VSC_settings_Raw = Get-Content -Path $VSC_settingsPath -Raw
+$VSC_settings_Raw = ""
+if(Test-Path $VSC_settingsPath)
+{
+    $VSC_settings_Raw = Get-Content -Path $VSC_settingsPath -Raw
+}
 $VSC_settings = [PSCustomObject]@{}
 if ($null -ne $VSC_settings_Raw)
 {
-    $VSC_settings = ConvertFrom-Json -Depth 100 $VSC_settings_Raw
+    ConvertFrom-Json $VSC_settings_Raw | Where-Object {
+        if($null -ne $_){
+            $VSC_settings = $_
+        }
+    }
 }
 
 Add-Member -InputObject $VSC_settings -Force "terminal.integrated.defaultProfile.windows" "PowerShell"
@@ -249,18 +257,16 @@ if($null -eq ($VSC_settings."terminal.integrated.profiles.windows"."PowerShell")
 {
     Add-Member -InputObject ($VSC_settings."terminal.integrated.profiles.windows") -Force "PowerShell" ([PSCustomObject]@{})
 }
-Add-Member -InputObject ($VSC_settings."terminal.integrated.profiles.windows"."PowerShell") -Force "source" "PowerShell"
-($VSC_settings."terminal.integrated.profiles.windows"."PowerShell"."args") =  ([string[]]$ps_settings)
+Add-Member -InputObject $VSC_settings."terminal.integrated.profiles.windows"."PowerShell" -Force "source" "PowerShell"
+Add-Member -InputObject $VSC_settings."terminal.integrated.profiles.windows"."PowerShell" -Force "args" ([string[]]$ps_settings)
 switch ($Choice) {
     "1"
     {
-        Write-Host "・Code Runnerの「Save File Before Run」を有効化"
         Add-Member -InputObject $VSC_settings -Force "code-runner.saveAllFilesBeforeRun" $true 
         Add-Member -InputObject $VSC_settings -Force "code-runner.saveFileBeforeRun" $false 
     }
     "2"
     {
-        Write-Host "・Code Runnerの「Save All File Before Run」を有効化"
         Add-Member -InputObject $VSC_settings -Force "code-runner.saveAllFilesBeforeRun" $false 
         Add-Member -InputObject $VSC_settings -Force "code-runner.saveFileBeforeRun" $true 
     }
@@ -279,10 +285,20 @@ Add-Member -InputObject $VSC_settings "code-runner.executorMap" $CodeRunner_cmd 
 ConvertTo-Json -Depth 100 $VSC_settings | Set-Content -Path $VSC_settingsPath -Encoding UTF8
 
 Write-Host "設定が完了しました"
-$yn = $false
+
 if($VS_isDoenlaed -or $VSC_isDoenlaed)
 {
-    Read-YN ([ref]$yn) "ダウンロードしたVisualStudio/VisualStudio Codeのインストーラーを削除しますか？ (y/n)"
+    $yn = $false
+    $downloaded_list = New-Object System.Collections.ArrayList
+    if($VS_isDoenlaed)
+    {
+        $downloaded_list.Add("VisualStudio")
+    }
+    if($VSC_isDoenlaed)
+    {
+        $downloaded_list.Add("VisualStudio Code")
+    }
+    Read-YN ([ref]$yn) "ダウンロードした$($downloaded_list -Join "/")のインストーラーを削除しますか？ (y/n)"
     if($yn)
     {
         if($VS_isDoenlaed)
