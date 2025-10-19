@@ -1,11 +1,13 @@
-﻿$productId = "Microsoft.VisualStudio.Product.Community"
+$productId = "Microsoft.VisualStudio.Product.Community"
 $channelUri = "https://aka.ms/vs/17/release/channel"
+$channelUri_all = "https://aka.ms/vs/channels"
+$channelUriPattern = "https://aka\.ms/vs/(\d+)/release/channel"
 $vsinstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe";
 $VSWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $NativeDesktopWorkload = "Microsoft.VisualStudio.Workload.NativeDesktop"
 
 $InstallerProcesses = @("vs_installer", "VSIXInstaller", "InstallCleanup", "setup")
-$VS_download = "https://aka.ms/vs/17/release/vs_community.exe"
+$VS_download = "https://c2rsetup.officeapps.live.com/c2r/downloadVS.aspx?sku=community&channel=Release"
 $VS_downloadPath = "vs_community.exe"
 $VS_isDoenlaed = $false
 $VSC_download = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64"
@@ -34,6 +36,25 @@ function Read-YN([ref]$ans, $mes)
         }
     }
 }
+function exitScript() {
+    pause
+    exit
+}
+function exit-Q {
+    param (
+        $Question,
+        $exitMes = $null
+    )
+    $yn = $false
+    Read-YN ([ref]$yn) $Question
+    if (!$yn) {
+        if(![System.String]::IsNullOrWhiteSpace($exitMes))
+        {
+            [void](Write-Host $exitMes)
+        }
+        exitScript
+    }
+}
 function ChackRunningVS()
 {
     $IsRunning = $false
@@ -49,13 +70,8 @@ function ChackRunningVS()
             Write-Host "VisualStudio関連のプロセスを検知しました" -ForegroundColor Yellow
             Write-Host "VisualStudio関連アプリを終了後、再試行してください"
             Write-Host ""
-            $yn = $false
-            Read-YN ([ref]$yn) "再試行しますか？ (y/n)"
-            if(!$yn)
-            {
-                Write-Host "インストールをキャンセルします"
-                exit
-            }
+            
+            exit-Q "再試行しますか？ (y/n)" "インストールをキャンセルします"
         }
     } while ($IsRunning)
     Write-Host "インストールを開始します。インストーラが起動したら指示に従ってください" -ForegroundColor Yellow
@@ -67,7 +83,6 @@ function download([ref]$filename, $url)
     if([System.String]::IsNullOrWhiteSpace($dldir))
     {
         $BaseName = [System.IO.Path]::GetFileNameWithoutExtension($filename.Value)
-        
     }
     else
     {
@@ -81,9 +96,62 @@ function download([ref]$filename, $url)
         $tempname = "$($BaseName)($i)"
     }
     $filename.Value = "$($tempname)$($Extension)"
-    Invoke-WebRequest -Uri $url -outfile $filename.Value
+    while($true)
+    {
+        try {
+            Invoke-WebRequest -Uri $url -outfile $filename.Value
+            break
+        }
+        catch {
+            Write-Host "ダウンロード処理中にエラーが発生しました"
+            Write-Host $_
+            Write-Host ""
+            exit-Q "再試行しますか？ (y/n)" "インストールをキャンセルします"
+        }
+    }
 }
+function get-latestVS()
+{
+    $resultUri = $channelUri
+    if (!($resultUri -match $channelUriPattern))
+    {
+        return $resultUri
+    }
+    $version = [int]($matches[1])
+    while($true)
+    {
+        try {
+            $allChannels = Invoke-RestMethod -Uri $channelUri_all
+            break
+        }
+        catch {
+            [void](Write-Host "VisualStudioの最新バージョンの取得に失敗しました")
+            [void](Write-Host $_)
+            [void](Write-Host "")
+            exit-Q "再試行しますか？ (y/n)" "インストールをキャンセルします"
+        }
+    }
 
+    foreach ($channel in $allChannels.channels)
+    {
+        if($channel.channelUri -match $channelUriPattern)
+        {
+            if($version -lt [int]($matches[1]))
+            {
+                $version = [int]($matches[1])
+                $resultUri = $channel.channelUri
+            }
+        }
+    }
+    return $resultUri
+}
+Write-Host "**********************************************************************"
+Write-Host "** CodeRunner auto installer v1.4"
+Write-Host "**********************************************************************"
+Write-Host ""
+
+$channelUri = get-latestVS
+$VSPath = @()
 if(Test-Path $VSWhere)
 {
     $VSPath = &$VSWhere -products * -format json | ConvertFrom-Json
@@ -97,8 +165,8 @@ if(Test-Path $VSWhere)
         {
             Write-Host "C++用のツールがインストール済みのVisualStudioから検出できませんでした"
             Write-Host "C++用のツールをVisualStudioに追加してください"
-            Write-Host ""
             Write-Host "インストールを開始したら、このウィンドウへ戻って操作を続けてください" -ForegroundColor Yellow
+            Write-Host ""
             if($VSPath.Count -gt 1)
             {
                 Write-Host "複数のVisualStudioのインスタンスを検出しました"
@@ -123,73 +191,57 @@ if(Test-Path $VSWhere)
             else
             {
                 $SelectedInstance = $VSPath[0]
-                Write-Host "自動的にインストール先を選択します"
+                Write-Host "VisualStudioのインスタンスが1つしか無いため、自動的にインストール先を選択します"
             }
-            Write-Host "$($SelectedInstance.displayName) ($($SelectedInstance.installationPath))"
-            $yn = $false
-            Read-YN -ans ([ref]$yn) "が選択されました。インストールを開始しますか？(y/n)"
-            if(!$yn)
-            {
-                Write-Host "インストールをキャンセルします"
-                exit
-            }
+            Write-Host "$($SelectedInstance.displayName) ($($SelectedInstance.installationPath)が選択されました"
+            exit-Q "C++用のツールのインストールを開始しますか？(y/n)" "インストールをキャンセルします"
             ChackRunningVS
-            & $vsinstaller modify --installPath "$($SelectedInstance.installationPath)" --add $NativeDesktopWorkload --force
+            Start-Process $vsinstaller "modify" "--installPath" $SelectedInstance.installationPath "--add" $NativeDesktopWorkload "--force"
         }
     }
-    else
-    {
-        Write-Host "新しくVisualStudio Communityをインストールします"
-        ChackRunningVS
-        &$vsinstaller install --productId $productId --channelUri $channelUri --add $NativeDesktopWorkload --includeRecommended --force
-    }
 }
-else
+if($VSPath.Count -le 0)
 {
-    Write-Host "VisualStudioが検出できませんでした"
+    Write-Host "VisualStudioが検出できませんでした" -ForegroundColor Yellow
     Write-Host "VisualStudio Communityをインストールしてください"
     Write-Host "インストールを開始したら、このウィンドウに戻って操作を続けてください"
-    $yn = $false
-    Read-YN -ans ([ref]$yn) "VisualStudio CommunityとC++用のツールのインストールを開始しますか？(y/n)"
-    if($yn)
+    exit-Q "VisualStudio CommunityとC++用のツールのインストールを開始しますか？(y/n)" "インストールをキャンセルします"
+    if(!(Test-Path $VSWhere))
     {
+        Write-Host "VisualStudio Installerが検出できないため、インターネットからダウンロードします"
         $VS_isDoenlaed = $true
         download ([ref]$VS_downloadPath) $VS_download
-        ChackRunningVS
-        &("./$($VS_downloadPath)") install --productId $productId --channelUri $channelUri --add $NativeDesktopWorkload --includeRecommended --force
+        $vsinstaller = $VS_downloadPath
     }
-    else {
-        Write-Host "インストールをキャンセルします"
-        exit
-    }
+    ChackRunningVS
+    Start-Process $vsinstaller -ArgumentList @("install", "--productId", $productId, "--channelUri", $channelUri, "--add", $NativeDesktopWorkload, "--includeRecommended", "--force")
 }
-    if(Get-Command code -ea SilentlyContinue)
+
+Write-Host ""
+if(Get-Command code -ea SilentlyContinue)
+{
+    Write-Host "VisualStudio Codeを検出しました"
+}
+else {
+    Write-Host "VisualStudio Codeを検出できませんでした" 
+    Write-Host "VisualStudio Codeをインストールしてください"
+    Write-Host ""
+    Write-Host "必ず「PATHへの追加」を有効にしてください" -ForegroundColor Yellow
+    Write-Host "インストールが完了したら、このウィンドウへ戻って操作を続けてください" -ForegroundColor Yellow
+    exit-Q "VisualStudio Codeをインストールしますか？ (y/n)"  "インストールをキャンセルします"
+
+    $VSC_isDoenlaed = $true
+    download ([ref]$VSC_downloadPath) $VSC_download
+    &("./$VSC_downloadPath")
+    Write-Host ""
+    Write-Host "インストールの完了を待機しています" -ForegroundColor Yellow
+    Write-Host "インストールを完了したにも関わらず次に進まない場合は、システムを再起動してもう一度この.ps1ファイルを実行してください" -ForegroundColor Yellow
+    while(!(Get-Command code -ea SilentlyContinue))
     {
-        Write-Host "VisualStudio Codeを検出しました"
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
     }
-    else {
-        Write-Host "VisualStudio Codeを検出できませんでした" 
-        Write-Host "VisualStudio Codeをインストールしてください"
-        Write-Host ""
-        Write-Host "必ず「PATHへの追加」を有効にしてください" -ForegroundColor Yellow
-        Write-Host "インストールが完了したら、このウィンドウへ戻って操作を続けてください" -ForegroundColor Yellow
-        $yn = $false
-        Read-YN ([ref]$yn) "VisualStudio Codeをインストールしますか？ (y/n)"
-        if($yn)
-        {
-            $VSC_isDoenlaed = $true
-            download ([ref]$VSC_downloadPath) $VSC_download
-            &("./$VSC_downloadPath")
-        }
-        Write-Host ""
-        Write-Host "インストールを待機しています" -ForegroundColor Yellow
-        Write-Host "インストールを完了したにも関わらず次に進まない場合は、システムを再起動してもう一度この.ps1ファイルを実行してください" -ForegroundColor Yellow
-        while(!(Get-Command code -ea SilentlyContinue))
-        {
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-        }
-        Write-Host "VisualStudio Codeを検出しました"
-    }
+    Write-Host "VisualStudio Codeを検出しました"
+}
 Write-Host ""
 Write-Host "これからインストールするCode Runnerには、プログラムの実行時に自動的にファイルを保存する機能があります"
 Write-Host "その機能を有効にしますか？"
@@ -206,6 +258,7 @@ while ($true) {
     }
 }
 
+Write-Host ""
 Write-Host "これより、以下の変更をVisualStudio Codeへ適用します。" -ForegroundColor Yellow
 Write-Host "・拡張機能の追加 C/C++ Extension Pack (ms-vscode.cpptools-extension-pack)"
 Write-Host "・拡張機能の追加 Code Runner (formulahendry.code-runner)"
@@ -223,29 +276,18 @@ switch ($Choice) {
     }
 }
 Write-Host ""
-$yn = $false
-$yn = Read-Host "変更を適用してもよろしいですか？(y/n)"
-if(!$yn)
-{
-    Write-Host "インストールをキャンセルします"
-    exit
-}
+exit-Q "変更を適用してもよろしいですか？(y/n)" "インストールをキャンセルします"
 code --install-extension ms-vscode.cpptools-extension-pack
 code --install-extension formulahendry.code-runner
 
-$VSC_settings_Raw = ""
-if(Test-Path $VSC_settingsPath)
-{
-    $VSC_settings_Raw = Get-Content -Path $VSC_settingsPath -Raw
-}
 $VSC_settings = [PSCustomObject]@{}
-if ($null -ne $VSC_settings_Raw)
+try
 {
-    ConvertFrom-Json $VSC_settings_Raw | Where-Object {
-        if($null -ne $_){
-            $VSC_settings = $_
-        }
-    }
+    $VSC_settings = ConvertFrom-Json (Get-Content -Path $VSC_settingsPath -Raw)
+}
+catch
+{
+    $VSC_settings = [PSCustomObject]@{}
 }
 
 Add-Member -InputObject $VSC_settings -Force "terminal.integrated.defaultProfile.windows" "PowerShell"
@@ -271,8 +313,7 @@ switch ($Choice) {
         Add-Member -InputObject $VSC_settings -Force "code-runner.saveFileBeforeRun" $true 
     }
 }
-$codeRunner_c = "cd `$dir `&`& `$chcpCode = [System.Text.Encoding]::GetEncoding([int]((chcp) -replace '[^\d]')) `&`& [Console]::OutputEncoding = `$chcpCode;cl.exe /nologo /source-charset:([System.Text.Encoding]`$chcpCode).WebName /execution-charset:([System.Text.Encoding]`$chcpCode).WebName `$fileName && echo `"`" ; .\`"`$fileNameWithoutExt`""
-$codeRunner_cpp = "cd `$dir `&`& `$chcpCode = [System.Text.Encoding]::GetEncoding([int]((chcp) -replace '[^\d]')) `&`& [Console]::OutputEncoding = `$chcpCode;cl.exe /nologo /EHsc /source-charset:([System.Text.Encoding]`$chcpCode).WebName /execution-charset:([System.Text.Encoding]`$chcpCode).WebName `$fileName && echo `"`" ; .\`"`$fileNameWithoutExt`""
+
 Add-Member -InputObject $VSC_settings -Force "code-runner.runInTerminal" $true
 $CodeRunner_cmd = [PSCustomObject]@{}
 if ($null -ne $CodeRunner_cmd."code-runner.executorMap")
@@ -284,19 +325,21 @@ Add-Member -InputObject $CodeRunner_cmd "cpp" $codeRunner_cpp -Force
 Add-Member -InputObject $VSC_settings "code-runner.executorMap" $CodeRunner_cmd -Force
 ConvertTo-Json -Depth 100 $VSC_settings | Set-Content -Path $VSC_settingsPath -Encoding UTF8
 
-Write-Host "設定が完了しました"
-
+Write-Host ""
+Write-Host "変更を適用しました"
 if($VS_isDoenlaed -or $VSC_isDoenlaed)
 {
+    $VS_isDoenlaed = $true
+    $VSC_isDoenlaed = $true
     $yn = $false
-    $downloaded_list = New-Object System.Collections.ArrayList
+    [string[]]$downloaded_list = @()
     if($VS_isDoenlaed)
     {
-        $downloaded_list.Add("VisualStudio")
+        $downloaded_list += "VisualStudio"
     }
     if($VSC_isDoenlaed)
     {
-        $downloaded_list.Add("VisualStudio Code")
+        $downloaded_list += "VisualStudio Code"
     }
     Read-YN ([ref]$yn) "ダウンロードした$($downloaded_list -Join "/")のインストーラーを削除しますか？ (y/n)"
     if($yn)
@@ -311,6 +354,8 @@ if($VS_isDoenlaed -or $VSC_isDoenlaed)
         }
     }
 }
-Write-Host "インストールが完了しました。"
-Write-Host "設定等の反映のため、コンピュータを再起動することをおすすめします。"
-pause
+
+Write-Host ""
+Write-Host "インストールが完了しました" -ForegroundColor Yellow
+Write-Host "設定等の反映のため、コンピュータを再起動することをおすすめします"
+exitScript
