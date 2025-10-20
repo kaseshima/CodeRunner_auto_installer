@@ -1,4 +1,4 @@
-$productId = "Microsoft.VisualStudio.Product.Community"
+﻿$productId = "Microsoft.VisualStudio.Product.Community"
 $channelUri = "https://aka.ms/vs/17/release/channel"
 $channelUri_all = "https://aka.ms/vs/channels"
 $channelUriPattern = "https://aka\.ms/vs/(\d+)/release/channel"
@@ -147,6 +147,7 @@ function get-latestVS()
 }
 Write-Host "**********************************************************************"
 Write-Host "** CodeRunner auto installer v1.4"
+Write-Host "** Copyright (c) 2025 kaseshima"
 Write-Host "**********************************************************************"
 Write-Host ""
 
